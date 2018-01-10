@@ -3,7 +3,7 @@
   (:require [clj-time.core :as t]
             [clj-time.format :as f]
             [clj-time.coerce :as c]
-            [clojure.spec :as s]))
+            [clojure.spec.alpha :as s]))
 
 
 ;; =============================================================================
@@ -47,20 +47,36 @@
   (-> dt (t/from-time-zone tz) (t/to-time-zone t/utc)))
 
 
+(def ^{:deprecated "0.2.0"} to-utc-corrected-date-time
+  tz-corrected-dt)
+
+
 (defn tz-corrected
   "Produce the UTC instant in time relative to timezone `tz`."
   [inst tz]
   (-> inst c/to-date-time (tz-corrected-dt tz) c/to-date))
 
 
+(def ^{:deprecated "0.2.0"} to-utc-corrected-date
+  tz-corrected)
+
+
 (defn tz-uncorrected-dt [dt tz]
   (-> dt (t/to-time-zone tz) (t/from-time-zone t/utc)))
+
+
+(def ^{:deprecated "0.2.0"} from-tz-date-time
+  tz-uncorrected-dt)
 
 
 (defn tz-uncorrected
   "Produce the absolute UTC instant from timezone `tz`."
   [inst tz]
   (-> inst c/to-date-time (tz-uncorrected-dt tz) c/to-date))
+
+
+(def ^{:deprecated "0.2.0"} from-tz-date
+  tz-uncorrected)
 
 
 (defn end-of-day
