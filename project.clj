@@ -1,4 +1,4 @@
-(defproject starcity/toolbelt-date "0.2.0"
+(defproject starcity/toolbelt-date "0.3.0-SNAPSHOT"
   :description "Utilities for working with dates in Clojure/Script."
   :url "https://github.com/starcity-properties/toolbelt-date"
   :license {:name "Eclipse Public License"
