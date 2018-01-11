@@ -25,6 +25,16 @@
         :ret string?)
 
 
+(def ^{:deprecated "0.2.0"} short-date
+  short)
+
+
+(defn ^{:deprecated "0.2.0"} short-date-time
+  "Use `short` instead."
+  [date]
+  (short date true))
+
+
 ;; =============================================================================
 ;; Predicates
 ;; =============================================================================
