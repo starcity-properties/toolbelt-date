@@ -135,18 +135,36 @@
        (end-of-day tz))))
 
 
-(defn plus-n-days
-  "Returns a java.util.Date that's 'n' days after the given java.util.Date.
-  If only providing 'n', will return a java.util.Date that's 'n' days after today."
-  ([n]
-   (plus-n-days (c/to-date (t/today)) n))
-  ([d n]
-   (-> d
-       (c/to-date-time)
-       (t/plus (t/days n))
-       (c/to-date))))
+(defn- transform*
+  [d f]
+  (-> d
+      c/to-date-time
+      (f)
+      c/to-date))
+
+
+(defn plus
+  "Returns a new java.util.Date corresponding to the given date (could be a long,
+  date/time, or java.util.Date) moved forwards by the given Period(s).
+  Using System/currentTimeMillis if no d is provided."
+  ([p]
+    (plus (System/currentTimeMillis) p))
+  ([d p]
+   (transform* d #(t/plus % p))))
+
+
+(defn minus
+  "Returns a new java.util.Date corresponding to the given date (could be a long,
+  date/time, or java.util.Date) moved backwards by the given Period(s).
+  Using System/currentTimeMillis if no d is provided."
+  ([p]
+   (plus (System/currentTimeMillis) p))
+  ([d p]
+   (transform* d #(t/minus % p))))
 
 
 (defn interval
+  "Returns an interval representing the span between the two given java.util.Date.
+  Note that intervals are closed on the left and open on the right."
   [d1 d2]
   (t/interval (c/to-date-time d1) (c/to-date-time d2)))
