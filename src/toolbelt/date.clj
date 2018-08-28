@@ -133,3 +133,20 @@
        c/from-date
        t/last-day-of-the-month
        (end-of-day tz))))
+
+
+(defn plus-n-days
+  "Returns a java.util.Date that's 'n' days after the given java.util.Date.
+  If only providing 'n', will return a java.util.Date that's 'n' days after today."
+  ([n]
+   (plus-n-days (c/to-date (t/today)) n))
+  ([d n]
+   (-> d
+       (c/to-date-time)
+       (t/plus (t/days n))
+       (c/to-date))))
+
+
+(defn interval
+  [d1 d2]
+  (t/interval (c/to-date-time d1) (c/to-date-time d2)))
