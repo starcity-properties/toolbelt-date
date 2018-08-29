@@ -43,6 +43,7 @@
 (defn is-first-day-of-month? [d]
   (= (t/day (c/to-date-time d)) 1))
 
+
 (s/fdef is-first-day-of-month?
         :args (s/cat :date inst?)
         :ret boolean?)
@@ -51,6 +52,16 @@
 ;; =============================================================================
 ;; Transformations
 ;; =============================================================================
+
+
+(defn transform
+  "'Transforms' a date where 'd' is a date of any type (timestamp,
+  org.joda.DateTime, java.util.Date. etc), and returns a java.util.Date,
+  after applying a transformation function 'f', which  is a function
+  that takes a date/time instance and any supplied args and returns a date."
+  [d f & args]
+  (-> (apply f (c/to-date-time d) args)
+      c/to-date))
 
 
 (defn tz-corrected-dt [dt tz]
@@ -64,7 +75,7 @@
 (defn tz-corrected
   "Produce the UTC instant in time relative to timezone `tz`."
   [inst tz]
-  (-> inst c/to-date-time (tz-corrected-dt tz) c/to-date))
+  (transform inst tz-corrected-dt tz))
 
 
 (def ^{:deprecated "0.2.0"} to-utc-corrected-date
@@ -82,7 +93,7 @@
 (defn tz-uncorrected
   "Produce the absolute UTC instant from timezone `tz`."
   [inst tz]
-  (-> inst c/to-date-time (tz-uncorrected-dt tz) c/to-date))
+  (transform inst tz-uncorrected-dt tz))
 
 
 (def ^{:deprecated "0.2.0"} from-tz-date
@@ -90,81 +101,115 @@
 
 
 (defn end-of-day
-  "Produce a date that is on the same day as `date`, but with time set to the
-  last second in `date`."
+  "Returns a java.util.Date representing the time 23:59:59 of the given date
+  in timezone 'tz'. Arity 1 version: uses 'utc' timezone.
+
+  'date' is a date instance as per 'toolbelt.date/transform'."
   ([date]
    (end-of-day date t/utc))
   ([date tz]
-   (let [[y m d] ((juxt t/year t/month t/day) (c/to-date-time date))]
-     (-> (t/date-time y m d)
-         (t/plus (t/days 1))
-         (t/minus (t/seconds 1))
-         (c/to-date)
-         (to-utc-corrected-date tz)))))
+   (let [[y m d] ((juxt t/year t/month t/day) (c/to-date-time date))
+         eod (t/date-time y m d 23 59 59)]
+     (to-utc-corrected-date eod tz))))
 
 
 (defn beginning-of-day
-  "Produce a date that is on the same day as `date`, but with time set to the
-  first second in `date`."
+  "Returns a java.util.Date representing the time 00:00:01 of the given date
+  in timezone 'tz'. Arity 1 version: uses 'utc' timezone.
+
+  'date' is a date instance as per 'toolbelt.date/transform'."
   ([date]
    (beginning-of-day date t/utc))
   ([date tz]
-   (-> (c/to-date-time date)
-       (t/floor t/day)
-       (c/to-date)
+   (-> (transform date t/floor t/day)
        (to-utc-corrected-date tz))))
 
 
 (defn beginning-of-month
+  "Returns a java.util.Date representing the first day of the month of
+  the given date in timezone 'tz'. Arity 1 version: uses 'utc' timezone.
+
+  'date' is a date instance as per 'toolbelt.date/transform'."
   ([date]
    (beginning-of-month date t/utc))
   ([date tz]
    (-> date
-       c/from-date
-       t/first-day-of-the-month
+       (transform t/first-day-of-the-month)
        (beginning-of-day tz))))
 
 
 (defn end-of-month
+  "Returns a java.util.Date representing the first day of the month of
+  the given date in timezone 'tz'. Arity 1 version: uses 'utc' timezone.
+
+  'date' is a date instance as per 'toolbelt.date/transform'."
   ([date]
    (end-of-month date t/utc))
   ([date tz]
    (-> date
-       c/from-date
-       t/last-day-of-the-month
+       (transform t/last-day-of-the-month)
        (end-of-day tz))))
 
 
-(defn- transform*
-  [d f]
-  (-> d
-      c/to-date-time
-      (f)
-      c/to-date))
-
-
 (defn plus
-  "Returns a new java.util.Date corresponding to the given date (could be a long,
-  date/time, or java.util.Date) moved forwards by the given Period(s).
-  Using System/currentTimeMillis if no d is provided."
-  ([p]
-    (plus (System/currentTimeMillis) p))
-  ([d p]
-   (transform* d #(t/plus % p))))
+  "Transforms a given date and returns a new java.util.Date moved forwards by the
+  given Period(s). Arity 1 version: moved forwards from System/currentTimeMillis.
+
+  'date' is a date instance as per 'toolbelt.date/transform'."
+  ([period]
+    (plus (System/currentTimeMillis) period))
+  ([date period]
+   (transform date t/plus period)))
 
 
 (defn minus
-  "Returns a new java.util.Date corresponding to the given date (could be a long,
-  date/time, or java.util.Date) moved backwards by the given Period(s).
-  Using System/currentTimeMillis if no d is provided."
-  ([p]
-   (plus (System/currentTimeMillis) p))
-  ([d p]
-   (transform* d #(t/minus % p))))
+  "Transforms a given date and returns a new java.util.Date moved backwards by the
+  given Period(s). Arity 1 version: moved backwards from System/currentTimeMillis.
+
+  'date' is a date instance as per 'toolbelt.date/transform'."
+  ([period]
+   (plus (System/currentTimeMillis) period))
+  ([date period]
+   (transform date t/minus period)))
 
 
 (defn interval
-  "Returns an interval representing the span between the two given java.util.Date.
-  Note that intervals are closed on the left and open on the right, and from < to."
+  "Returns an interval representing the span between the two given dates.
+  Note that intervals are closed on the left and open on the right.
+
+  'from' and 'to' are date instances of any type where 'from' is before 'to'."
   [from to]
   (t/interval (c/to-date-time from) (c/to-date-time to)))
+
+
+;; =============================================================================
+;; Components
+;; =============================================================================
+
+
+(defn day
+  "Return the day of month component of the given date.
+
+  'date' is a date instance of any type (e.g. timestamp, java-date,
+  date/time etc.)"
+  [date]
+  (t/day (c/to-date-time date)))
+
+
+(defn month
+  "Return the month component of the given date.
+
+  'date' is a date instance of any type (e.g. timestamp, java-date,
+  date/time etc.)"
+  [date]
+  (t/month (c/to-date-time date)))
+
+
+(defn year
+  "Return the year component of the given date.
+
+  'date' is a date instance of any type (e.g. timestamp, java-date,
+  date/time etc.)"
+  [date]
+  (t/year (c/to-date-time date)))
+
