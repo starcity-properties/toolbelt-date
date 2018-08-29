@@ -133,3 +133,38 @@
        c/from-date
        t/last-day-of-the-month
        (end-of-day tz))))
+
+
+(defn- transform*
+  [d f]
+  (-> d
+      c/to-date-time
+      (f)
+      c/to-date))
+
+
+(defn plus
+  "Returns a new java.util.Date corresponding to the given date (could be a long,
+  date/time, or java.util.Date) moved forwards by the given Period(s).
+  Using System/currentTimeMillis if no d is provided."
+  ([p]
+    (plus (System/currentTimeMillis) p))
+  ([d p]
+   (transform* d #(t/plus % p))))
+
+
+(defn minus
+  "Returns a new java.util.Date corresponding to the given date (could be a long,
+  date/time, or java.util.Date) moved backwards by the given Period(s).
+  Using System/currentTimeMillis if no d is provided."
+  ([p]
+   (plus (System/currentTimeMillis) p))
+  ([d p]
+   (transform* d #(t/minus % p))))
+
+
+(defn interval
+  "Returns an interval representing the span between the two given java.util.Date.
+  Note that intervals are closed on the left and open on the right, and from < to."
+  [from to]
+  (t/interval (c/to-date-time from) (c/to-date-time to)))
