@@ -182,6 +182,19 @@
   (t/interval (c/to-date-time from) (c/to-date-time to)))
 
 
+(defn within?
+  "With 2 arguments: Returns true if the given Interval contains the given
+   date. Note that if the date is exactly equal to the
+   end of the interval, this function returns false.
+   With 3 arguments: Returns true if the start date is
+   equal to or before and the end date is equal to or after the test
+   ReadablePartial."
+  ([interval test]
+   (t/within? interval (c/to-date-time test)))
+  ([start end test]
+   (apply t/within? (map c/to-date-time [start end test]))))
+
+
 ;; =============================================================================
 ;; Components
 ;; =============================================================================
