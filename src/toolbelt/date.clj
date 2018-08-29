@@ -165,6 +165,6 @@
 
 (defn interval
   "Returns an interval representing the span between the two given java.util.Date.
-  Note that intervals are closed on the left and open on the right."
-  [d1 d2]
-  (t/interval (c/to-date-time d1) (c/to-date-time d2)))
+  Note that intervals are closed on the left and open on the right, and from < to."
+  [from to]
+  (t/interval (c/to-date-time from) (c/to-date-time to)))
