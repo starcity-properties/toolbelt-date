@@ -1,5 +1,5 @@
 (ns toolbelt.date
-  (:refer-clojure :exclude [short])
+  (:refer-clojure :exclude [short > < <= >=])
   (:require [clj-time.core :as t]
             [clj-time.format :as f]
             [clj-time.coerce :as c]
@@ -21,8 +21,8 @@
     (f/unparse (get formatters k) (c/to-date-time date))))
 
 (s/fdef short
-        :args (s/cat :date inst? :time (s/? boolean?))
-        :ret string?)
+  :args (s/cat :date inst? :time (s/? boolean?))
+  :ret string?)
 
 
 (def ^{:deprecated "0.2.0"} short-date
@@ -45,8 +45,8 @@
 
 
 (s/fdef is-first-day-of-month?
-        :args (s/cat :date inst?)
-        :ret boolean?)
+  :args (s/cat :date inst?)
+  :ret boolean?)
 
 
 ;; =============================================================================
@@ -114,7 +114,7 @@
 
 
 (defn beginning-of-day
-  "Returns a java.util.Date representing the time 00:00:01 of the given date
+  "Returns a java.util.Date representing the time 00:00:00 of the given date
   in timezone 'tz'. Arity 1 version: uses 'utc' timezone.
 
   'date' is a date instance as per 'toolbelt.date/transform'."
@@ -157,7 +157,7 @@
 
   'date' is a date instance as per 'toolbelt.date/transform'."
   ([period]
-    (plus (System/currentTimeMillis) period))
+   (plus (System/currentTimeMillis) period))
   ([date period]
    (transform date t/plus period)))
 
@@ -195,6 +195,24 @@
    (apply t/within? (map c/to-date-time [start end test]))))
 
 
+(defn in-days
+  "Return the interval or period in days."
+  [p]
+  (t/in-days p))
+
+
+(defn days
+  "Given a number, returns a Period representing that many days."
+  [n]
+  (t/days n))
+
+
+(defn months
+  "Given a number, returns a Period representing that many months."
+  [n]
+  (t/months n))
+
+
 ;; =============================================================================
 ;; Components
 ;; =============================================================================
@@ -226,3 +244,71 @@
   [date]
   (t/year (c/to-date-time date)))
 
+
+;; =============================================================================
+;; Operators
+;; =============================================================================
+
+(defn- compare*
+  [f d & more]
+  (if-some [unix-times (not-empty (map c/to-long more))]
+    (boolean
+      (apply f
+             (c/to-long d)
+             unix-times))
+    true))
+
+
+(defn <
+  "Returns true if dates are in monotonically increasing order,
+  otherwise false.
+
+  Arguments are date instances of any type (e.g. timestamp, java-date,
+  date/time etc.)"
+  [date & more]
+  (apply compare* clojure.core/< date more))
+
+
+(defn <=
+  "Returns true if dates are in monotonically non-decreasing order,
+  otherwise false.
+
+  Arguments are date instances of any type (e.g. timestamp, java-date,
+  date/time etc.)"
+  [date & more]
+  (apply compare* clojure.core/<= date more))
+
+
+(defn >
+  "Returns true if dates are in monotonically decreasing order,
+  otherwise false.
+
+  Arguments are date instances of any type (e.g. timestamp, java-date,
+  date/time etc.)"
+  [date & more]
+  (apply compare* clojure.core/> date more))
+
+
+(defn >=
+  "Returns true if dates are in monotonically non-increasing order,
+  otherwise false.
+
+  Arguments are date instances of any type (e.g. timestamp, java-date,
+  date/time etc.)"
+  [date & more]
+  (apply compare* clojure.core/>= date more))
+
+
+;; =============================================================================
+;; Helpers for next/previous
+;; =============================================================================
+
+
+(defn next-day
+  [date]
+  (plus date (days 1)))
+
+
+(defn next-month
+  [date]
+  (plus date (months 1)))
