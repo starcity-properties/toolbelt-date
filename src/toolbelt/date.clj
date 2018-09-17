@@ -1,9 +1,13 @@
 (ns toolbelt.date
   (:refer-clojure :exclude [short > < <= >=])
-  (:require [clj-time.core :as t]
-            [clj-time.format :as f]
-            [clj-time.coerce :as c]
-            [clojure.spec.alpha :as s]))
+  (:require
+    [clj-time.core :as t]
+    [clj-time.format :as f]
+    [clj-time.coerce :as c]
+    [clojure.spec.alpha :as s]
+    [clojure.set :as sets]
+    [taoensso.timbre :as timbre])
+  (:import (org.joda.time Period)))
 
 
 ;; =============================================================================
@@ -54,14 +58,22 @@
 ;; =============================================================================
 
 
+(defn- normalize-in [d]
+  (c/to-date-time d))
+
+
+(defn- normalize-out [d]
+  (c/to-date d))
+
+
 (defn transform
   "'Transforms' a date where 'd' is a date of any type (timestamp,
   org.joda.DateTime, java.util.Date. etc), and returns a java.util.Date,
   after applying a transformation function 'f', which  is a function
   that takes a date/time instance and any supplied args and returns a date."
   [d f & args]
-  (-> (apply f (c/to-date-time d) args)
-      c/to-date))
+  (normalize-out
+    (apply f (normalize-in d) args)))
 
 
 (defn tz-corrected-dt [dt tz]
@@ -151,35 +163,13 @@
        (end-of-day tz))))
 
 
-(defn plus
-  "Transforms a given date and returns a new java.util.Date moved forwards by the
-  given Period(s). Arity 1 version: moved forwards from System/currentTimeMillis.
-
-  'date' is a date instance as per 'toolbelt.date/transform'."
-  ([period]
-   (plus (System/currentTimeMillis) period))
-  ([date period]
-   (transform date t/plus period)))
-
-
-(defn minus
-  "Transforms a given date and returns a new java.util.Date moved backwards by the
-  given Period(s). Arity 1 version: moved backwards from System/currentTimeMillis.
-
-  'date' is a date instance as per 'toolbelt.date/transform'."
-  ([period]
-   (plus (System/currentTimeMillis) period))
-  ([date period]
-   (transform date t/minus period)))
-
-
 (defn interval
   "Returns an interval representing the span between the two given dates.
   Note that intervals are closed on the left and open on the right.
 
   'from' and 'to' are date instances of any type where 'from' is before 'to'."
   [from to]
-  (t/interval (c/to-date-time from) (c/to-date-time to)))
+  (t/interval (normalize-in from) (normalize-in to)))
 
 
 (defn within?
@@ -214,35 +204,97 @@
 
 
 ;; =============================================================================
-;; Components
+;; Helpers
 ;; =============================================================================
 
 
-(defn day
-  "Return the day of month component of the given date.
-
-  'date' is a date instance of any type (e.g. timestamp, java-date,
-  date/time etc.)"
-  [date]
-  (t/day (c/to-date-time date)))
-
-
-(defn month
-  "Return the month component of the given date.
-
-  'date' is a date instance of any type (e.g. timestamp, java-date,
-  date/time etc.)"
-  [date]
-  (t/month (c/to-date-time date)))
+(def ^:private in-fns
+  {:millis  t/in-millis
+   :seconds t/in-seconds
+   :minutes t/in-minutes
+   :hours   t/in-hours
+   :days    t/in-days
+   :weeks   t/in-weeks
+   :months  t/in-months
+   :years   t/in-years})
 
 
-(defn year
-  "Return the year component of the given date.
+(def ^:private field-fns
+  {:milli        t/milli
+   :second       t/second
+   :minute       t/minute
+   :hour         t/hour
+   :day-of-week  t/day-of-week
+   :day-of-month t/day
+   :month        t/month
+   :year         t/year})
 
-  'date' is a date instance of any type (e.g. timestamp, java-date,
-  date/time etc.)"
-  [date]
-  (t/year (c/to-date-time date)))
+
+(defn- error-unknown-keys [f supported-ks ks]
+  (let [supported-set (set supported-ks)
+        test-set      (set ks)]
+    (when-some [unknown (not-empty (sets/difference test-set
+                                                    supported-set))]
+      (throw (ex-info (str "unrecognized key: " unknown ", supported are " supported-set)
+                      {:fn             f
+                       :supported-keys supported-set
+                       :unknown-keys   unknown})))))
+
+
+;; =============================================================================
+;; Time units
+;; =============================================================================
+
+
+(defn in
+  "For the given Period or Interval 'p', returns the time in the specified 'ks' time unit(s).
+  Possible units are #{:millis :seconds :minuts :hours :days :weeks :months :years}.
+
+  Returns a value if 'ks' is empty, otherwise a collection of values."
+  [p k & ks]
+  (error-unknown-keys in (keys in-fns) (cons k ks))
+  (let [fns (map #(get in-fns % (constantly nil)) (cons k ks))]
+    (cond-> ((apply juxt fns) p)
+            (empty? ks)
+            first)))
+
+
+;; =============================================================================
+;; Fields
+;; =============================================================================
+
+
+(defn field
+  "Returns the fields 'ks' of a given date where 'd' is a date instance of
+  any type (e.g. timestamp, long, joda-date) and possible values for 'k' and
+  'ks' are:
+  #{:second :minute :hour :day-of-week :day-of-month :month :year}.
+
+  Returns a value if 'ks' is empty, otherwise a collection of values."
+  [d k & ks]
+  (error-unknown-keys field (keys field-fns) (cons k ks))
+  (let [fns (map #(get field-fns % (constantly 0)) (cons k ks))]
+    (cond-> ((apply juxt fns) (normalize-in d))
+            (empty? ks)
+            first)))
+
+
+(defn period
+  "Given some keys with values, returns a Period that represents that amount of time.
+
+  E.g. (period :months 2 :days 1) returns a Period representing a time period of
+  2 months and 2 days.
+
+  Possible keys are:
+  #{:years :months :days :weeks :hours :minutes :seconds :millis}"
+  [& {:keys [years months days weeks hours minutes seconds millis] :as keyvals}]
+  (error-unknown-keys period
+                      #{:years :months :days :weeks :hours :minutes :seconds :millis}
+                      (keys keyvals))
+
+  (let [[y m w d h min sec mill] (mapv (fnil identity 0)
+                                       [years months weeks days hours minutes seconds millis])]
+    (Period. y m w d h min sec mill)))
 
 
 ;; =============================================================================
@@ -250,12 +302,14 @@
 ;; =============================================================================
 
 (defn- compare*
-  [f d & more]
-  (if-some [unix-times (not-empty (map c/to-long more))]
+  "Return true if compare fn 'f' is satisfied for all dates 'ds' applied in order.
+  Otherwise false.
+
+  'ds' are date instances of any type. Returns true if only one is provided."
+  [f d & ds]
+  (if-some [unix-times (not-empty (map c/to-long ds))]
     (boolean
-      (apply f
-             (c/to-long d)
-             unix-times))
+      (apply f (c/to-long d) unix-times))
     true))
 
 
@@ -265,8 +319,8 @@
 
   Arguments are date instances of any type (e.g. timestamp, java-date,
   date/time etc.)"
-  [date & more]
-  (apply compare* clojure.core/< date more))
+  [date & ds]
+  (apply compare* clojure.core/< date ds))
 
 
 (defn <=
@@ -275,8 +329,8 @@
 
   Arguments are date instances of any type (e.g. timestamp, java-date,
   date/time etc.)"
-  [date & more]
-  (apply compare* clojure.core/<= date more))
+  [date & ds]
+  (apply compare* clojure.core/<= date ds))
 
 
 (defn >
@@ -285,8 +339,8 @@
 
   Arguments are date instances of any type (e.g. timestamp, java-date,
   date/time etc.)"
-  [date & more]
-  (apply compare* clojure.core/> date more))
+  [date & ds]
+  (apply compare* clojure.core/> date ds))
 
 
 (defn >=
@@ -295,8 +349,41 @@
 
   Arguments are date instances of any type (e.g. timestamp, java-date,
   date/time etc.)"
-  [date & more]
-  (apply compare* clojure.core/>= date more))
+  [date & ds]
+  (apply compare* clojure.core/>= date ds))
+
+
+(defn plus
+  "Transforms a given date and returns a new java.util.Date:
+  Arity 1: moved forwards by given period 'p' from System/currentTimeMillis.
+  Arity 2: moved forwards by given Period 'p'.
+  Arity 3 or more: moved backwards by the given field specifiers as specified in
+  toolbelt.date/period.
+
+  'date' is a date instance as per 'toolbelt.date/transform'."
+  ([p]
+   (plus (System/currentTimeMillis) p))
+  ([date p]
+   (transform date t/plus p))
+  ([date k v & keyvals]
+   (transform date t/plus (apply period k v keyvals))))
+
+
+(defn minus
+  "Transforms a given date and returns a new java.util.Date moved backwards by the
+  given Period(s).
+  Arity 1: moved backwards by given period 'p' from System/currentTimeMillis.
+  Arity 2: moved backwards by given Period 'p'.
+  Arity 3 or more: moved backwards by the given field specifiers as specified in
+  toolbelt.date/period.
+
+  'date' is a date instance as per 'toolbelt.date/transform'."
+  ([p]
+   (plus (System/currentTimeMillis) p))
+  ([date p]
+   (transform date t/minus p))
+  ([date k v & keyvals]
+   (transform date t/minus (apply period k v keyvals))))
 
 
 ;; =============================================================================
