@@ -1,5 +1,5 @@
 (ns toolbelt.date
-  (:refer-clojure :exclude [short > < <= >=])
+  (:refer-clojure :exclude [assoc short > < <= >=])
   (:require
     [clj-time.core :as t]
     [clj-time.format :as f]
@@ -9,6 +9,8 @@
     [taoensso.timbre :as timbre])
   (:import (org.joda.time Period)))
 
+
+(declare transform)
 
 ;; =============================================================================
 ;; Formatting
@@ -54,26 +56,8 @@
 
 
 ;; =============================================================================
-;; Transformations
+;; Timezone helpers
 ;; =============================================================================
-
-
-(defn- normalize-in [d]
-  (c/to-date-time d))
-
-
-(defn- normalize-out [d]
-  (c/to-date d))
-
-
-(defn transform
-  "'Transforms' a date where 'd' is a date of any type (timestamp,
-  org.joda.DateTime, java.util.Date. etc), and returns a java.util.Date,
-  after applying a transformation function 'f', which  is a function
-  that takes a date/time instance and any supplied args and returns a date."
-  [d f & args]
-  (normalize-out
-    (apply f (normalize-in d) args)))
 
 
 (defn tz-corrected-dt [dt tz]
@@ -110,6 +94,33 @@
 
 (def ^{:deprecated "0.2.0"} from-tz-date
   tz-uncorrected)
+
+
+
+;; =============================================================================
+;; Transformations
+;; =============================================================================
+
+(def ^:private transform-fns
+  {:nth-of-month (fn [dt n] (t/nth-day-of-the-month dt n))})
+
+
+(defn- normalize-in [d]
+  (c/to-date-time d))
+
+
+(defn- normalize-out [d]
+  (c/to-date d))
+
+
+(defn transform
+  "'Transforms' a date where 'd' is a date of any type (timestamp,
+  org.joda.DateTime, java.util.Date. etc), and returns a java.util.Date,
+  after applying a transformation function 'f', which  is a function
+  that takes a date/time instance and any supplied args and returns a date."
+  [d f & args]
+  (normalize-out
+    (apply (or (transform-fns f) f) (normalize-in d) args)))
 
 
 (defn end-of-day
@@ -209,18 +220,18 @@
 
 
 (def ^:private in-fns
-  {:millis  t/in-millis
-   :seconds t/in-seconds
-   :minutes t/in-minutes
-   :hours   t/in-hours
-   :days    t/in-days
-   :weeks   t/in-weeks
-   :months  t/in-months
-   :years   t/in-years})
+  {:millisecs t/in-millis
+   :seconds   t/in-seconds
+   :minutes   t/in-minutes
+   :hours     t/in-hours
+   :days      t/in-days
+   :weeks     t/in-weeks
+   :months    t/in-months
+   :years     t/in-years})
 
 
 (def ^:private field-fns
-  {:milli        t/milli
+  {:millisec     t/milli
    :second       t/second
    :minute       t/minute
    :hour         t/hour
@@ -246,17 +257,28 @@
 ;; =============================================================================
 
 
-(defn in
+(defn as-unit
   "For the given Period or Interval 'p', returns the time in the specified 'ks' time unit(s).
-  Possible units are #{:millis :seconds :minuts :hours :days :weeks :months :years}.
+   Possible units are #{:millis :seconds :minutes :hours :days :weeks :months :years}.
 
-  Returns a value if 'ks' is empty, otherwise a collection of values."
+   Returns a value if 'ks' is empty, otherwise a collection of values."
   [p k & ks]
-  (error-unknown-keys in (keys in-fns) (cons k ks))
-  (let [fns (map #(get in-fns % (constantly nil)) (cons k ks))]
+  (error-unknown-keys as-unit (keys in-fns) (cons k ks))
+  (let [fns (map in-fns (cons k ks))]
     (cond-> ((apply juxt fns) p)
             (empty? ks)
             first)))
+
+
+(defn time-between
+  "Returns the time in the specified 'ks' time unit(s) between two dates 'start' (incl) and 'end'
+  (excl).
+   Possible time units are #{:millis :seconds :minutes :hours :days :weeks :months :years}.
+
+   Returns a value if 'ks' is empty, otherwise a collection of values."
+  [start end k & ks]
+  (error-unknown-keys time-between (keys in-fns) (cons k ks))
+  (apply as-unit (interval start end) k ks))
 
 
 ;; =============================================================================
@@ -273,7 +295,7 @@
   Returns a value if 'ks' is empty, otherwise a collection of values."
   [d k & ks]
   (error-unknown-keys field (keys field-fns) (cons k ks))
-  (let [fns (map #(get field-fns % (constantly 0)) (cons k ks))]
+  (let [fns (map field-fns (cons k ks))]
     (cond-> ((apply juxt fns) (normalize-in d))
             (empty? ks)
             first)))
@@ -379,7 +401,7 @@
 
   'date' is a date instance as per 'toolbelt.date/transform'."
   ([p]
-   (plus (System/currentTimeMillis) p))
+   (minus (System/currentTimeMillis) p))
   ([date p]
    (transform date t/minus p))
   ([date k v & keyvals]
@@ -387,15 +409,53 @@
 
 
 ;; =============================================================================
-;; Helpers for next/previous
+;; Adjustments
 ;; =============================================================================
 
 
-(defn next-day
-  [date]
-  (plus date (days 1)))
+(declare adjust)
+
+(def ^:private adjust-fns
+  {:inc-month      #(plus % :months 1)
+   :inc-day        #(plus % :days 1)
+
+   :dec-day        #(minus % :days 1)
+   :dec-month      #(minus % :months 1)
+   :dec-second     #(minus % :seconds 1)
+
+   :start-of-day   #(transform % t/floor t/day)
+   :end-of-day     #(adjust % :start-of-day :inc-day :dec-second)
+
+   :start-of-month #(transform % t/floor t/month)
+   :end-of-month   #(adjust % :start-of-month :inc-month :dec-second)})
 
 
-(defn next-month
-  [date]
-  (plus date (months 1)))
+(defn adjust
+  [date f & fs]
+  (let [dt  (normalize-in date)
+        fns (map #(get adjust-fns % %) (cons f fs))]
+    (normalize-out
+      (reduce (fn [d f] (f d)) dt fns))))
+
+
+(defn- date->map [dt]
+  (into {} (map #(vector % (field dt %))) (keys field-fns)))
+
+
+(defn assoc
+  "Returns a date with the value 'v' associated to field 'k' on the given 'date'.
+  E.g. (assoc <date> :day-of-month 5) will return a date with the day changed to the
+  fifth of the month."
+  [date k v & keyvals]
+  (error-unknown-keys assoc
+                      (keys (dissoc field-fns :day-of-week))
+                      (cons k (filter keyword? keyvals)))
+  (let [fields (date->map (normalize-in date))
+        {:keys [year month
+                day-of-month
+                hour minute
+                second millisec]} (apply clojure.core/assoc fields k v keyvals)]
+    (normalize-out
+      (t/date-time year month day-of-month hour minute second millisec))))
+
+
