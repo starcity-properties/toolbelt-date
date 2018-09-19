@@ -84,23 +84,20 @@
 (defspec date-plus-minus-test
   100
   (prop/for-all
-    [year  (gen/double* {:min 1 :max 3000 :NaN? false})
+    [year (gen/double* {:min 1 :max 3000 :NaN? false})
      month (gen/double* {:min 1 :max 12 :NaN? false})
-     p     gen/pos-int]
-    (let [inst (c/to-date (t/date-time (int year) (int month)))]
+     p gen/pos-int]
+    (let [date-time (t/date-time (int year) (int month))
+          inst      (c/to-date date-time)
+          days      (t/days p)]
       (testing "The inst plus a period is always equal that inst minus the same period."
-        (are [inst2] (= inst inst2)
-                     (-> (date/plus inst (t/seconds p))
-                         (date/minus (t/seconds p)))
-                     (-> (date/plus inst (t/minutes p))
-                         (date/minus (t/minutes p)))
-                     (-> (date/plus inst (t/hours p))
-                         (date/minus (t/hours p)))
-                     (-> (date/plus inst (t/days p))
-                         (date/minus (t/days p)))
-                     (-> (date/plus inst (t/weeks p))
-                         (date/minus (t/weeks p)))
-                     (-> (date/plus inst (t/months p))
-                         (date/minus (t/months p)))
-                     (-> (date/plus inst (t/years p))
-                         (date/minus (t/years p))))))))
+        (are [d2] (= inst d2)
+          ;; org.joda.DateTime
+          (-> (date/plus date-time days)
+              (date/minus days))
+          ;; java.util.Date
+          (-> (date/plus inst days)
+              (date/minus days))
+          ;; Long (unix time)
+          (-> (date/plus (c/to-long date-time) days)
+              (date/minus days)))))))
