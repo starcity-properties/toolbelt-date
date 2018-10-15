@@ -88,16 +88,29 @@
      month (gen/double* {:min 1 :max 12 :NaN? false})
      p gen/pos-int]
     (let [date-time (t/date-time (int year) (int month))
-          inst      (c/to-date date-time)
-          days      (t/days p)]
-      (testing "The inst plus a period is always equal that inst minus the same period."
+          inst      (c/to-date date-time)]
+
+      (testing "The inst plus a period is always equal t hat inst minus the same period."
         (are [d2] (= inst d2)
           ;; org.joda.DateTime
-          (-> (date/plus date-time days)
-              (date/minus days))
+          (-> (date/plus date-time (date/period :days p))
+              (date/minus (date/period :days p)))
           ;; java.util.Date
-          (-> (date/plus inst days)
-              (date/minus days))
+          (-> (date/plus inst :days p)
+              (date/minus :days p))
+
           ;; Long (unix time)
-          (-> (date/plus (c/to-long date-time) days)
-              (date/minus days)))))))
+          (-> (date/plus (c/to-long date-time) :days p)
+              (date/minus :days p))
+
+          ;; Months (mixed with other elements might not result in the same start time)
+          (-> (date/plus date-time :months p)
+              (date/minus :months p))
+
+          ;; Years
+          (-> (date/plus date-time :years p)
+              (date/minus :years p))
+
+          ;; Mixed
+          (-> (date/plus date-time :days p :weeks p :hours p)
+              (date/minus :weeks p :days p :hours p)))))))

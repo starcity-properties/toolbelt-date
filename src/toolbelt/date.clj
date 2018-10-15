@@ -5,8 +5,7 @@
     [clj-time.format :as f]
     [clj-time.coerce :as c]
     [clojure.spec.alpha :as s]
-    [clojure.set :as sets]
-    [taoensso.timbre :as timbre])
+    [clojure.set :as sets])
   (:import (org.joda.time Period)))
 
 
@@ -105,11 +104,11 @@
   {:nth-of-month (fn [dt n] (t/nth-day-of-the-month dt n))})
 
 
-(defn- normalize-in [d]
+(defn- norm-in [d]
   (c/to-date-time d))
 
 
-(defn- normalize-out [d]
+(defn- norm-out [d]
   (c/to-date d))
 
 
@@ -119,8 +118,9 @@
   after applying a transformation function 'f', which  is a function
   that takes a date/time instance and any supplied args and returns a date."
   [d f & args]
-  (normalize-out
-    (apply (or (transform-fns f) f) (normalize-in d) args)))
+  (norm-out
+    (apply (or (transform-fns f) f)
+           (norm-in d) args)))
 
 
 (defn end-of-day
@@ -180,7 +180,7 @@
 
   'from' and 'to' are date instances of any type where 'from' is before 'to'."
   [from to]
-  (t/interval (normalize-in from) (normalize-in to)))
+  (t/interval (norm-in from) (norm-in to)))
 
 
 (defn within?
@@ -231,14 +231,14 @@
 
 
 (def ^:private field-fns
-  {:millisec     t/milli
-   :second       t/second
-   :minute       t/minute
-   :hour         t/hour
-   :day-of-week  t/day-of-week
-   :day-of-month t/day
-   :month        t/month
-   :year         t/year})
+  {:millisec    t/milli
+   :second      t/second
+   :minute      t/minute
+   :hour        t/hour
+   :day-of-week t/day-of-week
+   :day         t/day
+   :month       t/month
+   :year        t/year})
 
 
 (defn- error-unknown-keys [f supported-ks ks]
@@ -257,13 +257,13 @@
 ;; =============================================================================
 
 
-(defn as-unit
+(defn in-unit
   "For the given Period or Interval 'p', returns the time in the specified 'ks' time unit(s).
    Possible units are #{:millis :seconds :minutes :hours :days :weeks :months :years}.
 
    Returns a value if 'ks' is empty, otherwise a collection of values."
   [p k & ks]
-  (error-unknown-keys as-unit (keys in-fns) (cons k ks))
+  (error-unknown-keys in-unit (keys in-fns) (cons k ks))
   (let [fns (map in-fns (cons k ks))]
     (cond-> ((apply juxt fns) p)
             (empty? ks)
@@ -278,7 +278,7 @@
    Returns a value if 'ks' is empty, otherwise a collection of values."
   [start end k & ks]
   (error-unknown-keys time-between (keys in-fns) (cons k ks))
-  (apply as-unit (interval start end) k ks))
+  (apply in-unit (interval start end) k ks))
 
 
 ;; =============================================================================
@@ -290,15 +290,20 @@
   "Returns the fields 'ks' of a given date where 'd' is a date instance of
   any type (e.g. timestamp, long, joda-date) and possible values for 'k' and
   'ks' are:
-  #{:second :minute :hour :day-of-week :day-of-month :month :year}.
+  #{:second :minute :hour :day-of-week :day :month :year}.
 
   Returns a value if 'ks' is empty, otherwise a collection of values."
   [d k & ks]
   (error-unknown-keys field (keys field-fns) (cons k ks))
   (let [fns (map field-fns (cons k ks))]
-    (cond-> ((apply juxt fns) (normalize-in d))
+    (cond-> ((apply juxt fns) (norm-in d))
             (empty? ks)
             first)))
+
+
+(defn day
+  [d]
+  (field d :day))
 
 
 (defn period
@@ -382,22 +387,31 @@
   Arity 3 or more: moved backwards by the given field specifiers as specified in
   toolbelt.date/period.
 
+  Caution: The function will add each element of a period one by one from largest to smallest. Note that certain
+  elements are of variable length (e.g. months), so when mixed with others it cannot be guaranteed that adding
+  and subtracting the same period will give the same result as the initial value.
+
   'date' is a date instance as per 'toolbelt.date/transform'."
   ([p]
    (plus (System/currentTimeMillis) p))
   ([date p]
    (transform date t/plus p))
   ([date k v & keyvals]
-   (transform date t/plus (apply period k v keyvals))))
+   (plus date (apply period k v keyvals))))
 
 
 (defn minus
   "Transforms a given date and returns a new java.util.Date moved backwards by the
-  given Period(s).
+  given Period(s). Note that month is of variable length, so the order in which operations
+  occur will matter.
   Arity 1: moved backwards by given period 'p' from System/currentTimeMillis.
   Arity 2: moved backwards by given Period 'p'.
   Arity 3 or more: moved backwards by the given field specifiers as specified in
   toolbelt.date/period.
+
+  Caution: The function will subtract each element of a period one by one from largest to smallest. Note that certain
+  elements are of variable length (e.g. months), so when mixed with others it cannot be guaranteed that adding and
+  subtracting the same period will give the same result as the initial value.
 
   'date' is a date instance as per 'toolbelt.date/transform'."
   ([p]
@@ -405,7 +419,7 @@
   ([date p]
    (transform date t/minus p))
   ([date k v & keyvals]
-   (transform date t/minus (apply period k v keyvals))))
+   (minus date (apply period k v keyvals))))
 
 
 ;; =============================================================================
@@ -432,30 +446,51 @@
 
 (defn adjust
   [date f & fs]
-  (let [dt  (normalize-in date)
+  (let [dt  (norm-in date)
         fns (map #(get adjust-fns % %) (cons f fs))]
-    (normalize-out
+    (norm-out
       (reduce (fn [d f] (f d)) dt fns))))
 
 
 (defn- date->map [dt]
-  (into {} (map #(vector % (field dt %))) (keys field-fns)))
+  (let [norm-d (norm-in dt)]
+    (into {}
+          (map #(vector % (field norm-d %)))
+          (keys field-fns))))
+
+
+(defn- map->date
+  [{:keys [year month day hour minute second millisec]}]
+  (norm-out
+    (t/date-time year month day hour minute second millisec)))
 
 
 (defn assoc
   "Returns a date with the value 'v' associated to field 'k' on the given 'date'.
-  E.g. (assoc <date> :day-of-month 5) will return a date with the day changed to the
+  E.g. (assoc <date> :day 5) will return a date with the day changed to the
   fifth of the month."
   [date k v & keyvals]
-  (error-unknown-keys assoc
-                      (keys (dissoc field-fns :day-of-week))
-                      (cons k (filter keyword? keyvals)))
-  (let [fields (date->map (normalize-in date))
-        {:keys [year month
-                day-of-month
-                hour minute
-                second millisec]} (apply clojure.core/assoc fields k v keyvals)]
-    (normalize-out
-      (t/date-time year month day-of-month hour minute second millisec))))
+  (map->date
+    (apply clojure.core/assoc (date->map date) k v keyvals)))
 
 
+
+(defn next-day [d] (adjust d :inc-day))
+(defn next-month [d] (adjust d :inc-month))
+
+
+;; =============================================================================
+;; Coerce
+;; =============================================================================
+
+
+(defn to-millis
+  "Convert the date 'dt' to the number of milliseconds after the Unix epoch."
+  [dt]
+  (c/to-long dt))
+
+
+(defn to-seconds
+  "Convert the date 'dt' to the number of seconds after the Unix epoch."
+  [dt]
+  (c/to-epoch dt))
