@@ -494,3 +494,20 @@
   "Convert the date 'dt' to the number of seconds after the Unix epoch."
   [dt]
   (c/to-epoch dt))
+
+
+;; =============================================================================
+;; Convenience
+;; =============================================================================
+
+
+(defn now
+  "Returns a Date instant for the current instant in the UTC time zone."
+  []
+  (norm-out (t/now)))
+
+
+(defn days-in-month
+  "Returns the number of days of the month of the provided date instant."
+  [date]
+  (field (adjust date :end-of-month) :day))

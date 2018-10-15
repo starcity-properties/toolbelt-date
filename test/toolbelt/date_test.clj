@@ -90,7 +90,7 @@
     (let [date-time (t/date-time (int year) (int month))
           inst      (c/to-date date-time)]
 
-      (testing "The inst plus a period is always equal t hat inst minus the same period."
+      (testing "The inst plus a period is always equal that inst minus the same period."
         (are [d2] (= inst d2)
           ;; org.joda.DateTime
           (-> (date/plus date-time (date/period :days p))
