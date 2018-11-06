@@ -304,6 +304,16 @@
 ;; =============================================================================
 
 
+(defn previous-day
+  [date]
+  (minus date (days 1)))
+
+
+(defn previous-month
+  [date]
+  (minus date (months 1)))
+
+
 (defn next-day
   [date]
   (plus date (days 1)))
