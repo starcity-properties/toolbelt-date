@@ -3,7 +3,8 @@
   (:require [clj-time.core :as t]
             [clj-time.format :as f]
             [clj-time.coerce :as c]
-            [clojure.spec.alpha :as s]))
+            [clojure.spec.alpha :as s])
+  (:import (org.joda.time Period)))
 
 
 ;; =============================================================================
@@ -243,6 +244,25 @@
   date/time etc.)"
   [date]
   (t/year (c/to-date-time date)))
+
+
+;; =============================================================================
+;; Periods
+;; =============================================================================
+
+
+(defn period
+  "Given some keys with values, returns a Period that represents that amount of time.
+
+  E.g. (period :months 2 :days 1) returns a Period representing a time period of
+  2 months and 2 days.
+
+  Possible keys are:
+  #{:years :months :days :weeks :hours :minutes :seconds :millis}"
+  [& {:keys [years months days weeks hours minutes seconds millis] :as keyvals}]
+  (let [[y m w d h min sec mill] (mapv (fnil identity 0)
+                                       [years months weeks days hours minutes seconds millis])]
+    (Period. y m w d h min sec mill)))
 
 
 ;; =============================================================================
