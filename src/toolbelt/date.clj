@@ -201,6 +201,24 @@
   (t/in-days p))
 
 
+(defn seconds
+  "Given a number, returns a Period representing that many seconds."
+  [n]
+  (t/seconds n))
+
+
+(defn minutes
+  "Given a number, returns a Period representing that many minutes."
+  [n]
+  (t/minutes n))
+
+
+(defn hours
+  "Given a number, returns a Period representing that many hours."
+  [n]
+  (t/hours n))
+
+
 (defn days
   "Given a number, returns a Period representing that many days."
   [n]
