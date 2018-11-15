@@ -81,6 +81,23 @@
          #inst "2018-02-01T07:59:59.000-00:00")))
 
 
+(deftest period-test
+  (let [date #inst "2018-01-01T00:00:00.000-00:00"]
+    (is (= #inst "2018-01-01T00:00:01.000-00:00"
+           (date/plus date (date/period :seconds 1))
+           (date/plus date (date/period :millis 1000))))
+    (is (= #inst "2018-02-01T00:00:01.000-00:00"
+           (date/plus date (date/period :seconds 1 :months 1))
+           (date/plus date (date/period :seconds 1 :days 31))))
+    (is (= #inst "2019-03-01T00:00:01.000-00:00"
+           (date/plus date (date/period :seconds 1 :months 2 :years 1))))
+    (is (= #inst "2018-01-15T00:00:00.000-00:00"
+           (date/plus date (date/period :weeks 2))
+           (date/plus date (date/period :days 14))))
+    (is (= #inst "2018-01-01T00:00:00.100-00:00"
+           (date/plus date (date/period :millis 100))))))
+
+
 (defspec date-plus-minus-test
   100
   (prop/for-all
