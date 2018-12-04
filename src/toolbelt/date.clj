@@ -1,5 +1,5 @@
 (ns toolbelt.date
-  (:refer-clojure :exclude [short > < <= >=])
+  (:refer-clojure :exclude [short > < <= >= min max])
   (:require [clj-time.core :as t]
             [clj-time.format :as f]
             [clj-time.coerce :as c]
@@ -53,6 +53,12 @@
 ;; =============================================================================
 ;; Transformations
 ;; =============================================================================
+
+
+(defn- norm-out*
+  "Normalize the returned date value to a java.util.Date."
+  [date]
+  (c/to-date date))
 
 
 (defn transform
@@ -169,7 +175,7 @@
 
   'date' is a date instance as per 'toolbelt.date/transform'."
   ([period]
-   (plus (System/currentTimeMillis) period))
+   (minus (System/currentTimeMillis) period))
   ([date period]
    (transform date t/minus period)))
 
@@ -317,6 +323,18 @@
   date/time etc.)"
   [date & more]
   (apply compare* clojure.core/>= date more))
+
+
+(defn max
+  "Returns the largest date, i.e. the latest in time."
+  [date & more]
+  (norm-out* (apply clojure.core/max (map c/to-long (cons date more)))))
+
+
+(defn min
+  "Returns the smallest date, i.e. the earliest in time."
+  [date & more]
+  (norm-out* (apply clojure.core/min (map c/to-long (cons date more)))))
 
 
 ;; =============================================================================
