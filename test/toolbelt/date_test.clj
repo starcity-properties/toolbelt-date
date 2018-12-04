@@ -98,14 +98,21 @@
            (date/plus date (date/period :millis 100))))))
 
 
+;; =============================================================================
+;; Property based
+;; =============================================================================
+
+
+(defn- gen-date* []
+  (gen/fmap (fn [n] (c/to-date n)) gen/int))
+
+
 (defspec date-plus-minus-test
   100
   (prop/for-all
-    [year (gen/double* {:min 1 :max 3000 :NaN? false})
-     month (gen/double* {:min 1 :max 12 :NaN? false})
+    [inst (gen-date*)
      p gen/pos-int]
-    (let [date-time (t/date-time (int year) (int month))
-          inst      (c/to-date date-time)
+    (let [date-time (c/to-date-time inst)
           days      (t/days p)]
       (testing "The inst plus a period is always equal that inst minus the same period."
         (are [d2] (= inst d2)
@@ -116,5 +123,17 @@
           (-> (date/plus inst days)
               (date/minus days))
           ;; Long (unix time)
-          (-> (date/plus (c/to-long date-time) days)
+          (-> (date/plus (c/to-long inst) days)
               (date/minus days)))))))
+
+
+(defspec date-min-max-test
+  100
+  (prop/for-all
+    [dts (gen/vector (gen-date*) 1 100)]
+    (testing "Min date is always the earliest and max date is always the latest."
+      (let [sorted-dates (sort dts)]
+        (is (= (apply date/max dts) (last sorted-dates))
+            "Max date should be the latest date.")
+        (is (= (apply date/min dts) (first sorted-dates))
+            "Min date should be the earliest date.")))))
