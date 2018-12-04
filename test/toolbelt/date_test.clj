@@ -108,10 +108,12 @@
 
 
 (defspec date-plus-minus-test
+  ;; Run test 100 times with different generated data
   100
   (prop/for-all
+    ;; Generate random date and integer to represent number of days
     [inst (gen-date*)
-     p gen/pos-int]
+     p gen/int]
     (let [date-time (c/to-date-time inst)
           days      (t/days p)]
       (testing "The inst plus a period is always equal that inst minus the same period."
@@ -128,8 +130,10 @@
 
 
 (defspec date-min-max-test
+  ;; Run test 100 times with different generated data
   100
   (prop/for-all
+    ;; Generate a vector of dates with 1 to 100 elements
     [dts (gen/vector (gen-date*) 1 100)]
     (testing "Min date is always the earliest and max date is always the latest."
       (let [sorted-dates (sort dts)]
