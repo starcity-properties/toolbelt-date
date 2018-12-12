@@ -55,6 +55,13 @@
 ;; =============================================================================
 
 
+(defn- timezone*
+  "Returns a timezone for a supplied timezone id the timszone itself"
+  [tz]
+  (if (string? tz)
+    (t/time-zone-for-id tz)
+    tz))
+
 (defn- norm-out*
   "Normalize the returned date value to a java.util.Date."
   [date]
@@ -72,7 +79,7 @@
 
 
 (defn tz-corrected-dt [dt tz]
-  (-> dt (t/from-time-zone tz) (t/to-time-zone t/utc)))
+  (-> dt (t/from-time-zone (timezone* tz)) (t/to-time-zone t/utc)))
 
 
 (def ^{:deprecated "0.2.0"} to-utc-corrected-date-time
@@ -82,7 +89,7 @@
 (defn tz-corrected
   "Produce the UTC instant in time relative to timezone `tz`."
   [inst tz]
-  (transform inst tz-corrected-dt tz))
+  (transform inst tz-corrected-dt (timezone* tz)))
 
 
 (def ^{:deprecated "0.2.0"} to-utc-corrected-date
@@ -90,7 +97,7 @@
 
 
 (defn tz-uncorrected-dt [dt tz]
-  (-> dt (t/to-time-zone tz) (t/from-time-zone t/utc)))
+  (-> dt (t/to-time-zone (timezone* tz)) (t/from-time-zone t/utc)))
 
 
 (def ^{:deprecated "0.2.0"} from-tz-date-time
@@ -100,7 +107,7 @@
 (defn tz-uncorrected
   "Produce the absolute UTC instant from timezone `tz`."
   [inst tz]
-  (transform inst tz-uncorrected-dt tz))
+  (transform inst tz-uncorrected-dt (timezone* tz)))
 
 
 (def ^{:deprecated "0.2.0"} from-tz-date
@@ -220,6 +227,33 @@
   (t/months n))
 
 
+(defn to-map
+  "Returns a map with keys and values representing the supplied `date`. The returned map includes
+  the following keys: #{:year :month :day :hour :minute :second :millisecond :day-of-week :week-of-year}
+  with corresponding number values."
+  [date]
+  (let [[year month day hour minute second millis dow woy] ((juxt t/year t/month t/day t/hour t/minute t/second t/milli t/day-of-week t/week-number-of-year)
+                                                             (c/to-date-time date))]
+    {:year         year
+     :month        month
+     :day          day
+     :hour         hour
+     :minute       minute
+     :second       second
+     :millisecond  millis
+     :day-of-week  dow
+     :week-of-year woy}))
+
+
+(defn from-map
+  "Returns a date given a map with keys and values representing a date time. Considers the following
+  keys: #{:year :month :day :hour :minute :second :millisecond} with corresponding number values
+  when creating the date."
+  [{:keys [year month day hour minute second millisecond]}]
+  (let [[y m d h min sec mill] (mapv (fnil identity 0) [year month day hour minute second millisecond])]
+    (norm-out* (t/date-time y m d h min sec mill))))
+
+
 ;; =============================================================================
 ;; Components
 ;; =============================================================================
@@ -328,13 +362,13 @@
 (defn max
   "Returns the largest date, i.e. the latest in time."
   [date & more]
-  (norm-out* (apply clojure.core/max (map c/to-long (cons date more)))))
+  (norm-out* (t/latest (cons date more))))
 
 
 (defn min
   "Returns the smallest date, i.e. the earliest in time."
   [date & more]
-  (norm-out* (apply clojure.core/min (map c/to-long (cons date more)))))
+  (norm-out* (t/earliest (cons date more))))
 
 
 ;; =============================================================================
