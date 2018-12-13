@@ -196,6 +196,12 @@
   (t/interval (c/to-date-time from) (c/to-date-time to)))
 
 
+(defn overlap
+  "Returns an interval representing the overlap between the two supplied intervals."
+  [i1 i2]
+  (t/overlap i1 i2))
+
+
 (defn within?
   "With 2 arguments: Returns true if the given Interval contains the given
    date. Note that if the date is exactly equal to the
@@ -252,6 +258,12 @@
   [{:keys [year month day hour minute second millisecond]}]
   (let [[y m d h min sec mill] (mapv (fnil identity 0) [year month day hour minute second millisecond])]
     (norm-out* (t/date-time y m d h min sec mill))))
+
+
+(defn to-unix-time
+  "Return the number of seconds after the Unix time"
+  [dt]
+  (some-> (c/to-long dt) (quot 1000)))
 
 
 ;; =============================================================================
