@@ -4,7 +4,10 @@
             [clj-time.format :as f]
             [clj-time.coerce :as c]
             [clojure.spec.alpha :as s])
-  (:import (org.joda.time Period)))
+  (:import (org.joda.time Period)
+           (java.time ZoneId Instant)
+           (java.util Date)
+           (java.time.format DateTimeFormatter)))
 
 
 ;; =============================================================================
@@ -24,16 +27,6 @@
 (s/fdef short
   :args (s/cat :date inst? :time (s/? boolean?))
   :ret string?)
-
-
-(def ^{:deprecated "0.2.0"} short-date
-  short)
-
-
-(defn ^{:deprecated "0.2.0"} short-date-time
-  "Use `short` instead."
-  [date]
-  (short date true))
 
 
 ;; =============================================================================
@@ -82,26 +75,14 @@
   (-> dt (t/from-time-zone (timezone* tz)) (t/to-time-zone t/utc)))
 
 
-(def ^{:deprecated "0.2.0"} to-utc-corrected-date-time
-  tz-corrected-dt)
-
-
 (defn tz-corrected
   "Produce the UTC instant in time relative to timezone `tz`."
   [inst tz]
   (transform inst tz-corrected-dt (timezone* tz)))
 
 
-(def ^{:deprecated "0.2.0"} to-utc-corrected-date
-  tz-corrected)
-
-
 (defn tz-uncorrected-dt [dt tz]
   (-> dt (t/to-time-zone (timezone* tz)) (t/from-time-zone t/utc)))
-
-
-(def ^{:deprecated "0.2.0"} from-tz-date-time
-  tz-uncorrected-dt)
 
 
 (defn tz-uncorrected
@@ -110,59 +91,133 @@
   (transform inst tz-uncorrected-dt (timezone* tz)))
 
 
-(def ^{:deprecated "0.2.0"} from-tz-date
-  tz-uncorrected)
-
-
-(defn end-of-day
-  "Returns a java.util.Date representing the time 23:59:59 of the given date
-  in timezone 'tz'. Arity 1 version: uses 'utc' timezone.
-
-  'date' is a date instance as per 'toolbelt.date/transform'."
-  ([date]
-   (end-of-day date t/utc))
-  ([date tz]
-   (let [[y m d] ((juxt t/year t/month t/day) (c/to-date-time date))
-         eod (t/date-time y m d 23 59 59)]
-     (to-utc-corrected-date eod tz))))
-
-
-(defn beginning-of-day
+(defn start-of-day-local
   "Returns a java.util.Date representing the time 00:00:00 of the given date
-  in timezone 'tz'. Arity 1 version: uses 'utc' timezone.
-
+  in timezone 'tz'.
+  Arity 1: Adjust `date` in UTC time.
+  Arity 2: Adjust `date` with respect to timezone `tz`.
   'date' is a date instance as per 'toolbelt.date/transform'."
   ([date]
-   (beginning-of-day date t/utc))
+   (start-of-day-local date "UTC"))
   ([date tz]
    (-> (transform date t/floor t/day)
-       (to-utc-corrected-date tz))))
+       (tz-corrected tz))))
 
 
-(defn beginning-of-month
+(defn start-of-day-utc
+  "Takes a 'date' in UTC time representing a time in 'timezone', and returns the UTC corrected
+  start of day of the local date in 'timezone'.
+
+  Note: Will convert 'date' to local time in 'timezone' before calculating start of day, input should be in UTC.
+  E.g.
+  'date' represents Oct 12 at 23:00 in Pacific time so the input will be Oct 13 at 06:00.
+  Returned will be Oct 12 at 07:00, which represents start of day of Oct 12 in Pacific time 'timezone'."
+  ([date]
+   (start-of-day-utc date "UTC"))
+  ([date timezone]
+   (start-of-day-utc date timezone timezone))
+  ([date from-tz to-tz]
+   (-> (tz-uncorrected date from-tz)
+       (transform t/floor t/day)
+       (tz-corrected to-tz))))
+
+
+(defn start-of-month-local
   "Returns a java.util.Date representing the first day of the month of
-  the given date in timezone 'tz'. Arity 1 version: uses 'utc' timezone.
-
+  the given date in timezone 'tz'.
+  Arity 1: Adjust `date` in UTC time.
+  Arity 2: Adjust `date` with respect to timezone `tz`.
   'date' is a date instance as per 'toolbelt.date/transform'."
   ([date]
-   (beginning-of-month date t/utc))
+   (start-of-month-local date t/utc))
   ([date tz]
    (-> date
        (transform t/first-day-of-the-month)
-       (beginning-of-day tz))))
+       (start-of-day-local tz))))
 
 
-(defn end-of-month
-  "Returns a java.util.Date representing the first day of the month of
-  the given date in timezone 'tz'. Arity 1 version: uses 'utc' timezone.
+(defn start-of-month-utc
+  "Takes a 'date' in UTC time representing a time in 'timezone', and returns the UTC corrected
+  start of the month of the local date in 'timezone'.
 
+  Note: Will convert 'date' to local time in 'timezone' before calculating start of month, input should be in UTC.
+  E.g.
+  'date' represents Oct 31 at 23:00 in Pacific time so the input will be Nov 1 at 06:00.
+  Returned will be Oct 1 at 07:00, which represents start of Oct in Pacific time 'timezone'."
+  ([date]
+   (start-of-month-utc date "UTC"))
+  ([date timezone]
+   (start-of-month-utc date timezone timezone))
+  ([date from-tz to-tz]
+   (-> (tz-uncorrected date from-tz)
+       (start-of-month-local to-tz))))
+
+
+(defn end-of-day-local
+  "Returns a java.util.Date representing the time 23:59:59 of the given date
+  in timezone 'tz'.
+  Arity 1: Adjust `date` in UTC time.
+  Arity 2: Adjust `date` with respect to timezone `tz`.
   'date' is a date instance as per 'toolbelt.date/transform'."
   ([date]
-   (end-of-month date t/utc))
+   (end-of-day-local date "UTC"))
+  ([date tz]
+   (let [[y m d] ((juxt t/year t/month t/day) (c/to-date-time date))
+         eod (t/date-time y m d 23 59 59)]
+     (tz-corrected eod tz))))
+
+
+(defn end-of-day-utc
+  "Takes a 'date' in UTC time representing a time in 'timezone', and returns a UTC corrected date representing the
+  end of day of the local date in 'timezone'.
+
+  Note: Will convert 'date' to local time in 'timezone' before calculating end of day, input should be in UTC.
+  E.g.
+  'date' represents Oct 12 at 23:00 in Pacific time so the input will be Oct 13 at 06:00.
+  Returned will be Oct 13 at 06:59:59, which represents end of day of Oct 12 in Pacific time 'timezone'.
+  Arity 1: Adjust `date` from and to UTC timezone.
+  Arity 2: Adjust `date` from and to the supplied `timezone`.
+  Arity 3: Adjust `date` from `from-tz` and return a new date represented in `to-tz`."
+  ([date]
+   (end-of-day-utc date "UTC"))
+  ([date timezone]
+   (end-of-day-utc date timezone timezone))
+  ([date from-tz to-tz]
+   (-> (tz-uncorrected date from-tz)
+       (end-of-day-local to-tz))))
+
+
+(defn end-of-month-local
+  "Takes a `date` in local time and returns a new date representing the end of day of the last day
+  of the month corrected to UTC.
+  Arity 1: Adjust `date` in UTC time.
+  Arity 2: Adjust `date` with respect to timezone `tz`."
+  ([date]
+   (end-of-month-local date t/utc))
   ([date tz]
    (-> date
        (transform t/last-day-of-the-month)
-       (end-of-day tz))))
+       (end-of-day-local tz))))
+
+
+(defn end-of-month-utc
+  "Takes a 'date' in UTC time representing a time in 'timezone', and returns the UTC corrected
+  end of the month of the local date in 'timezone'.
+
+  Note: Will convert 'date' to local time in 'timezone' before calculating start of month, input should be in UTC.
+  E.g.
+  'date' represents Oct 31 at 23:00 in Pacific time so the input will be Nov 1 at 06:00.
+  Returned will be Oct 1 at 06:59:59, which represents Oct 31 23:59:59 in Pacific time 'timezone'.
+  Arity 1: Adjust `date` from and to UTC timezone.
+  Arity 2: Adjust `date` from and to the supplied `timezone`.
+  Arity 3: Adjust `date` from `from-tz` and return a new date represented in `to-tz`."
+  ([date]
+   (end-of-month-utc date "UTC"))
+  ([date timezone]
+   (end-of-month-utc date timezone timezone))
+  ([date from-tz to-tz]
+   (-> (tz-uncorrected date from-tz)
+       (end-of-month-local to-tz))))
 
 
 (defn plus
@@ -221,6 +276,27 @@
   (t/in-days p))
 
 
+(defn in-months
+  "Return the interval or period in months."
+  [p]
+  (t/in-months p))
+
+
+(defn in
+  "Return the interval or period `p` in `unit` specified by a keyword:
+  #{:years :months :days :weeks :hours :minutes :seconds :millis}"
+  [unit p]
+  (let [fns {:years   t/in-years
+             :months  t/in-months
+             :days    t/in-days
+             :weeks   t/in-weeks
+             :hours   t/in-hours
+             :minutes t/in-minutes
+             :seconds t/in-seconds
+             :millis  t/in-millis}]
+    ((fns unit (constantly -1)) p)))
+
+
 (defn days
   "Given a number, returns a Period representing that many days."
   [n]
@@ -251,6 +327,11 @@
      :week-of-year woy}))
 
 
+;; =============================================================================
+;; Conversions
+;; =============================================================================
+
+
 (defn from-map
   "Returns a date given a map with keys and values representing a date time. Considers the following
   keys: #{:year :month :day :hour :minute :second :millisecond} with corresponding number values
@@ -261,9 +342,37 @@
 
 
 (defn to-unix-time
-  "Return the number of seconds after the Unix time"
-  [dt]
-  (some-> (c/to-long dt) (quot 1000)))
+  "Return the number of seconds after the Unix time
+  Arity 1: returns the number of seconds after Unix time.
+  Arity 2: returns the time in `unit` after Unix time: #{:millis :seconds}"
+  ([dt]
+   (to-unix-time dt :seconds))
+  ([dt unit]
+   (when-some [date-long (c/to-long dt)]
+     (case unit
+       :seconds (quot date-long 1000)
+       :millis date-long))))
+
+
+
+(defn from-unix-time-millis
+  "Return a date given the supplied number of millseconds `millis` since the UNIX time."
+  [millis]
+  (c/to-date millis))
+
+
+(defn from-unix-time-secs
+  "Return a date given the supplied number of seconds `millis` since the UNIX time."
+  [secs]
+  (from-unix-time-millis (* 1000 secs)))
+
+
+(defn from-ISO
+  "Parse an ISO instant in UTC and return a java date, where the ISO input is of the form:
+  \"2018-12-13T16:02:36.815Z\"."
+  [iso-instant]
+  (let [acc (.parse (DateTimeFormatter/ISO_INSTANT) iso-instant)]
+    (Date/from (Instant/from acc))))
 
 
 ;; =============================================================================
@@ -396,3 +505,77 @@
 (defn next-month
   [date]
   (plus date (months 1)))
+
+
+;; =============================================================================
+;; Properties
+;; =============================================================================
+
+
+(defn days-in-month
+  "Takes a `date` in UTC time and returns the number of days in the month of the local time in `timezone`
+  the date represents."
+  ([date]
+   (days-in-month date "UTC"))
+  ([date timezone]
+   (-> (.toInstant (c/to-date date))
+       (.atZone (ZoneId/of timezone))
+       (.toLocalDate)
+       (.lengthOfMonth))))
+
+(s/fdef days-in-month
+  :args (s/cat :date (s/or :inst inst? :unix integer?)
+               :timezone (s/? string?)))
+
+
+;; =============================================================================
+;; Deprecated
+;; =============================================================================
+
+
+(defmacro defdeprecated
+  "Helper macro to def deprecated functions and invoke the new implementation. Taken from leiningen:
+  https://github.com/technomancy/leiningen/commit/6e18fc495d485acb6942d08f3719a644f697bf27"
+  [old new]
+  `(let [new# ~(str (.getName (:ns (meta (resolve new)))) "/" (name new))
+         warn# (delay (println "Warning:" '~old "is deprecated; use" new#))]
+     (defn ~(vary-meta old assoc :doc (format "Compatibility alias for %s" new))
+       [& args#]
+       (force warn#)
+       (apply ~(resolve new) args#))))
+
+
+(def ^{:deprecated "0.2.0"} short-date short)
+
+(defn ^{:deprecated "0.2.0"} short-date-time
+  "Use `short` instead."
+  [date]
+  (short date true))
+
+
+(declare ^{:deprecated "0.2.0"} from-tz-date)
+(defdeprecated from-tz-date tz-uncorrected)
+
+(declare ^{:deprecated "0.2.0"} from-tz-date-time)
+(defdeprecated from-tz-date-time tz-uncorrected)
+
+(declare ^{:deprecated "0.2.0"} to-utc-corrected-date-time)
+(defdeprecated to-utc-corrected-date-time tz-corrected)
+
+(declare ^{:deprecated "0.2.0"} to-utc-corrected-date)
+(defdeprecated to-utc-corrected-date tz-corrected)
+
+(defdeprecated short-date short)
+(defdeprecated short-date-time short)
+
+(declare ^{:deprecated "0.4.2"} beginning-of-day)
+(defdeprecated beginning-of-day start-of-day-local)
+
+(declare ^{:deprecated "0.4.2"} beginning-of-month)
+(defdeprecated beginning-of-month start-of-month-utc)
+
+(declare ^{:deprecated "0.4.2"} end-of-day)
+(defdeprecated end-of-day end-of-day-local)
+
+(declare ^{:deprecated "0.4.2"} end-of-month)
+(defdeprecated end-of-month end-of-month-utc)
