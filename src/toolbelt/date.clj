@@ -5,9 +5,7 @@
             [clj-time.coerce :as c]
             [clojure.spec.alpha :as s])
   (:import (org.joda.time Period)
-           (java.time ZoneId Instant)
-           (java.util Date)
-           (java.time.format DateTimeFormatter)))
+           (java.time ZoneId)))
 
 
 ;; =============================================================================
@@ -55,8 +53,8 @@
     (t/time-zone-for-id tz)
     tz))
 
-(defn- norm-out*
-  "Normalize the returned date value to a java.util.Date."
+(defn to-date
+  "Coerce to date."
   [date]
   (c/to-date date))
 
@@ -92,9 +90,9 @@
 
 
 (defn start-of-day-local
-  "Returns a java.util.Date representing the time 00:00:00 of the given date
-  in timezone 'tz'.
-  Arity 1: Adjust `date` in UTC time.
+  "Given a `date` in local time UTC, returns a new date representing the time 00:00:00 in timezone 'tz'
+  of the same day.
+  Arity 1: Adjust `date` to UTC (will be unchanged when input date is in UTC).
   Arity 2: Adjust `date` with respect to timezone `tz`.
   'date' is a date instance as per 'toolbelt.date/transform'."
   ([date]
@@ -123,9 +121,9 @@
 
 
 (defn start-of-month-local
-  "Returns a java.util.Date representing the first day of the month of
-  the given date in timezone 'tz'.
-  Arity 1: Adjust `date` in UTC time.
+  "Given a `date` in local time UTC, returns a new date representing the 1st of the month at 00:00:00 in timezone 'tz'
+  of the same month.
+  Arity 1: Adjust `date` to UTC (will be unchanged when input date is in UTC).
   Arity 2: Adjust `date` with respect to timezone `tz`.
   'date' is a date instance as per 'toolbelt.date/transform'."
   ([date]
@@ -154,9 +152,9 @@
 
 
 (defn end-of-day-local
-  "Returns a java.util.Date representing the time 23:59:59 of the given date
-  in timezone 'tz'.
-  Arity 1: Adjust `date` in UTC time.
+  "Given a `date` in local time UTC, returns a new date representing the time 23:59:59 in timezone 'tz'
+  of the same day.
+  Arity 1: Adjust `date` to UTC (will be unchanged when input date is in UTC).
   Arity 2: Adjust `date` with respect to timezone `tz`.
   'date' is a date instance as per 'toolbelt.date/transform'."
   ([date]
@@ -188,10 +186,11 @@
 
 
 (defn end-of-month-local
-  "Takes a `date` in local time and returns a new date representing the end of day of the last day
-  of the month corrected to UTC.
-  Arity 1: Adjust `date` in UTC time.
-  Arity 2: Adjust `date` with respect to timezone `tz`."
+  "Given a `date` in local time UTC, returns a new date representing the last of the month at 23:59:59 in timezone 'tz'
+  of the same month.
+  Arity 1: Adjust `date` to UTC (will be unchanged when input date is in UTC).
+  Arity 2: Adjust `date` with respect to timezone `tz`.
+  'date' is a date instance as per 'toolbelt.date/transform'."
   ([date]
    (end-of-month-local date t/utc))
   ([date tz]
@@ -338,7 +337,7 @@
   when creating the date."
   [{:keys [year month day hour minute second millisecond]}]
   (let [[y m d h min sec mill] (mapv (fnil identity 0) [year month day hour minute second millisecond])]
-    (norm-out* (t/date-time y m d h min sec mill))))
+    (to-date (t/date-time y m d h min sec mill))))
 
 
 (defn to-unix-time
@@ -365,14 +364,6 @@
   "Return a date given the supplied number of seconds `millis` since the UNIX time."
   [secs]
   (from-unix-time-millis (* 1000 secs)))
-
-
-(defn from-ISO
-  "Parse an ISO instant in UTC and return a java date, where the ISO input is of the form:
-  \"2018-12-13T16:02:36.815Z\"."
-  [iso-instant]
-  (let [acc (.parse (DateTimeFormatter/ISO_INSTANT) iso-instant)]
-    (Date/from (Instant/from acc))))
 
 
 ;; =============================================================================
@@ -483,13 +474,13 @@
 (defn max
   "Returns the largest date, i.e. the latest in time."
   [date & more]
-  (norm-out* (t/latest (cons date more))))
+  (to-date (t/latest (cons date more))))
 
 
 (defn min
   "Returns the smallest date, i.e. the earliest in time."
   [date & more]
-  (norm-out* (t/earliest (cons date more))))
+  (to-date (t/earliest (cons date more))))
 
 
 ;; =============================================================================
