@@ -107,6 +107,10 @@
   (gen/fmap (fn [n] (c/to-date n)) gen/int))
 
 
+(defn- gen-int* [opts]
+  (gen/fmap int (gen/double* (merge {:NaN? false} opts))))
+
+
 (defspec date-plus-minus-test
   ;; Run test 100 times with different generated data
   100
@@ -129,7 +133,7 @@
               (date/minus days)))))))
 
 
-(defspec date-min-max-test
+(defspec date-min-max-order-test
   ;; Run test 100 times with different generated data
   100
   (prop/for-all
@@ -140,4 +144,45 @@
         (is (= (apply date/max dts) (last sorted-dates))
             "Max date should be the latest date.")
         (is (= (apply date/min dts) (first sorted-dates))
-            "Min date should be the earliest date.")))))
+            "Min date should be the earliest date.")
+        (is (true? (date/< sorted-dates)))
+        (is (true? (date/<= sorted-dates)))
+        (is (true? (date/> (reverse sorted-dates))))
+        (is (true? (date/>= (reverse sorted-dates))))))))
+
+
+(defspec date-to-from-map-test
+  ;; Run test 100 times with different generated data.
+  100
+  (let [ks [:year :month :day :hour :minute :second :millisecond]]
+    (prop/for-all
+      [date (gen-date*)
+       ;; Generate the keys to include in the date map.
+       date-keys (gen/set (gen/elements ks) {:max-elements (count ks)})
+       ;; Generate date values for each key.
+       date-vals (gen/hash-map
+                   :year gen/pos-int
+                   :month (gen-int* {:min 1 :max 12})
+                   :day (gen-int* {:min 1 :max 28})
+                   :hour (gen-int* {:min 0 :max 23})
+                   :minute (gen-int* {:min 0 :max 59})
+                   :second (gen-int* {:min 0 :max 59})
+                   :millisecond (gen-int* {:min 0 :max 999}))]
+      (testing "Input date is always equal a date that has been converted to a map and back."
+        (is (= date (date/from-map (date/to-map date)))))
+
+      (testing "Convert random date map into a date, should use default min values for missing keys."
+        ;; Select the random keys from the date value map.
+        (is (date/from-map (select-keys date-vals date-keys)))))))
+
+
+(defspec date-interval-in-period-test
+  ;; Run test 100 times with different generated data.
+  100
+  (prop/for-all [date (gen-date*)
+                 pos-n gen/int]
+    (testing "The interval in unit U between date A and date A + period of N in unit U should always equal absolute N."
+      (are [k] (let [adjusted (date/plus date (date/period k pos-n))]
+                 (= (max pos-n (- pos-n))
+                    (date/in k (date/interval (date/min date adjusted) (date/max date adjusted)))))
+        :years :months :days :hours :minutes :seconds :millis))))

@@ -9,6 +9,15 @@
 
 
 ;; =============================================================================
+;; Constants
+;; =============================================================================
+
+
+(defn- min-value* [k]
+  (if (contains? #{:month :day} k) 1 0))
+
+
+;; =============================================================================
 ;; Formatting
 ;; =============================================================================
 
@@ -335,8 +344,9 @@
   "Returns a date given a map with keys and values representing a date time. Considers the following
   keys: #{:year :month :day :hour :minute :second :millisecond} with corresponding number values
   when creating the date."
-  [{:keys [year month day hour minute second millisecond]}]
-  (let [[y m d h min sec mill] (mapv (fnil identity 0) [year month day hour minute second millisecond])]
+  [params]
+  (let [[y m d h min sec mill] (map #(get params % (min-value* %))
+                                    [:year :month :day :hour :minute :second :millisecond])]
     (to-date (t/date-time y m d h min sec mill))))
 
 
@@ -563,10 +573,10 @@
 (defdeprecated beginning-of-day start-of-day-local)
 
 (declare ^{:deprecated "0.4.2"} beginning-of-month)
-(defdeprecated beginning-of-month start-of-month-utc)
+(defdeprecated beginning-of-month start-of-month-local)
 
 (declare ^{:deprecated "0.4.2"} end-of-day)
 (defdeprecated end-of-day end-of-day-local)
 
 (declare ^{:deprecated "0.4.2"} end-of-month)
-(defdeprecated end-of-month end-of-month-utc)
+(defdeprecated end-of-month end-of-month-local)
