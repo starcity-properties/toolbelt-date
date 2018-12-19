@@ -342,7 +342,7 @@
 
 (defn to-unix-time
   "Return the number of seconds after the Unix time
-  Arity 1: returns the number of seconds after Unix time.
+  Arity 1: returns the number of milliseconds after Unix time.
   Arity 2: returns the time in `unit` after Unix time: #{:millis :seconds}"
   ([dt]
    (to-unix-time dt :millis))
